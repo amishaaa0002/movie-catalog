@@ -168,4 +168,4 @@ java -jar target/movie-catalog-0.0.1-SNAPSHOT.jar --catalog.default-rating=6.5
 The Dockerfile sets `SPRING_H2_CONSOLE_SETTINGS_WEB_ALLOW_OTHERS=true`. Without it, H2 rejects console requests that come in through Docker's network.
 
 ## Zip File
-Attached in the same structure of our project for easy to download.
+Attached movie-catalog.zip in the same structure of our project for easy to download.
