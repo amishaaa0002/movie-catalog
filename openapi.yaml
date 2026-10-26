@@ -1,0 +1,702 @@
+openapi: 3.0.3
+info:
+  title: Movie Catalog Service
+  description: |
+    REST API for managing directors, movies and genres.
+
+    * A director has many movies; a movie has exactly one director.
+    * A movie belongs to many genres via the `movie_genre` join table.
+    * `catalog.max-genres-per-movie` (default 3) caps the genres per movie.
+    * `catalog.default-rating` (default 7.0) is applied when a movie is created/updated without a rating.
+
+    All list endpoints are paged (`page`, `size`, `sort`). Every error response uses the `ApiError` schema.
+  version: "1.0"
+servers:
+  - url: http://localhost:8080
+    description: Local
+# The API is unauthenticated
+security: []
+tags:
+  - name: Info
+    description: Application metadata
+  - name: Directors
+    description: Director CRUD and a director's movies
+  - name: Genres
+    description: Genre creation and listing
+  - name: Movies
+    description: Movie CRUD, filtering and genre association
+
+paths:
+  /api/info:
+    get:
+      tags: [Info]
+      summary: Application name and version
+      description: Values come from `app.name` and `app.version` in application.properties.
+      operationId: getInfo
+      responses:
+        "200":
+          description: Application info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InfoResponse"
+
+  /api/directors:
+    post:
+      tags: [Directors]
+      summary: Create a new director
+      operationId: createDirector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DirectorRequest"
+      responses:
+        "201":
+          description: Director created
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Directors]
+      summary: List all directors
+      operationId: getAllDirectors
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+        - name: sort
+          in: query
+          description: "`property[,asc|desc]`. Allowed properties: id, name, nationality, birthYear. Default `id,asc`."
+          schema:
+            type: string
+            example: name,asc
+      responses:
+        "200":
+          description: Page of directors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/directors/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Directors]
+      summary: Get director by ID
+      operationId: getDirectorById
+      responses:
+        "200":
+          description: The director
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Directors]
+      summary: Update a director
+      description: Full update; all fields are replaced.
+      operationId: updateDirector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DirectorRequest"
+      responses:
+        "200":
+          description: Updated director
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Directors]
+      summary: Delete a director
+      description: Rejected with 409 while the director still has movies (a movie requires a director).
+      operationId: deleteDirector
+      responses:
+        "204":
+          description: Director deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/directors/{id}/movies:
+    get:
+      tags: [Directors]
+      summary: Get all movies by a director
+      operationId: getMoviesByDirector
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+        - $ref: "#/components/parameters/MovieSort"
+      responses:
+        "200":
+          description: Page of the director's movies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoviePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/genres:
+    post:
+      tags: [Genres]
+      summary: Create a genre
+      description: Genre names are unique, compared case-insensitively.
+      operationId: createGenre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenreRequest"
+      responses:
+        "201":
+          description: Genre created
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    get:
+      tags: [Genres]
+      summary: List all genres
+      operationId: getAllGenres
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+        - name: sort
+          in: query
+          description: "`property[,asc|desc]`. Allowed properties: id, name. Default `id,asc`."
+          schema:
+            type: string
+            example: name,asc
+      responses:
+        "200":
+          description: Page of genres
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenrePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/genres/{id}:
+    get:
+      tags: [Genres]
+      summary: Get genre by ID
+      description: Target of the `Location` header returned by `POST /api/genres`.
+      operationId: getGenreById
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The genre
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/movies:
+    post:
+      tags: [Movies]
+      summary: Create a movie
+      description: |
+        `rating` defaults to `catalog.default-rating` when omitted.
+        `genreIds` may contain at most `catalog.max-genres-per-movie` ids (400 otherwise); unknown ids give 404.
+      operationId: createMovie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovieRequest"
+      responses:
+        "201":
+          description: Movie created
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Movies]
+      summary: List movies
+      description: Optionally filter by genre name (case-insensitive) and/or release year. Filters combine with AND.
+      operationId: getMovies
+      parameters:
+        - name: genre
+          in: query
+          description: Genre name, case-insensitive
+          schema:
+            type: string
+            example: Sci-Fi
+        - name: year
+          in: query
+          description: Release year
+          schema:
+            type: integer
+            format: int32
+            example: 2010
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+        - $ref: "#/components/parameters/MovieSort"
+      responses:
+        "200":
+          description: Page of movies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoviePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/movies/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Movies]
+      summary: Get movie by ID with genres
+      operationId: getMovieById
+      responses:
+        "200":
+          description: The movie with its director and genres
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Movies]
+      summary: Update movie details
+      description: |
+        Full update of title, releaseYear, rating and directorId (rating falls back to `catalog.default-rating`).
+        When `genreIds` is present it replaces the movie's genres (same limits as create); when omitted the genres are kept.
+      operationId: updateMovie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovieRequest"
+      responses:
+        "200":
+          description: Updated movie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Movies]
+      summary: Delete a movie
+      description: Also removes its rows from the movie_genre join table.
+      operationId: deleteMovie
+      responses:
+        "204":
+          description: Movie deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/movies/{id}/genres/{gid}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: gid
+        in: path
+        required: true
+        description: Genre ID
+        schema:
+          type: integer
+          format: int64
+          example: 1
+    post:
+      tags: [Movies]
+      summary: Associate a genre with a movie
+      description: Idempotent; associating a genre the movie already has returns 200 unchanged. 400 if the movie is already at the genre limit.
+      operationId: addGenreToMovie
+      responses:
+        "200":
+          description: Movie with updated genres
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Movies]
+      summary: Remove a genre from a movie
+      description: 404 if the movie or genre does not exist, or the genre is not associated with the movie.
+      operationId: removeGenreFromMovie
+      responses:
+        "200":
+          description: Movie with updated genres
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    Page:
+      name: page
+      in: query
+      description: Zero-based page index
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Size:
+      name: size
+      in: query
+      description: Page size (max 100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    MovieSort:
+      name: sort
+      in: query
+      description: "`property[,asc|desc]`. Allowed properties: id, title, releaseYear, rating. Default `id,asc`. Repeatable."
+      schema:
+        type: string
+        example: releaseYear,desc
+
+  headers:
+    Location:
+      description: URL of the created resource
+      schema:
+        type: string
+        format: uri
+        example: http://localhost:8080/api/movies/1
+
+  responses:
+    BadRequest:
+      description: Validation failed, malformed body, invalid parameter, or business rule violated
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          examples:
+            validation:
+              summary: Bean Validation failure
+              value:
+                timestamp: "2026-10-23T10:15:30Z"
+                status: 400
+                error: Bad Request
+                message: Validation failed
+                path: /api/movies
+                fieldErrors:
+                  title: title is required
+                  rating: rating must be between 0.0 and 10.0
+            tooManyGenres:
+              summary: Genre limit exceeded
+              value:
+                timestamp: "2026-10-23T10:15:30Z"
+                status: 400
+                error: Bad Request
+                message: A movie can have at most 3 genres, but 4 were supplied
+                path: /api/movies
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            timestamp: "2026-10-23T10:15:30Z"
+            status: 404
+            error: Not Found
+            message: Movie not found with id 42
+            path: /api/movies/42
+    Conflict:
+      description: Request conflicts with existing data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            timestamp: "2026-10-23T10:15:30Z"
+            status: 409
+            error: Conflict
+            message: Genre 'Drama' already exists
+            path: /api/genres
+
+  schemas:
+    InfoResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          example: movie_catalog
+        version:
+          type: string
+          example: "1.0"
+
+    DirectorRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Christopher Nolan
+        nationality:
+          type: string
+          nullable: true
+          example: British
+        birthYear:
+          type: integer
+          format: int32
+          nullable: true
+          example: 1970
+
+    DirectorResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Christopher Nolan
+        nationality:
+          type: string
+          nullable: true
+          example: British
+        birthYear:
+          type: integer
+          format: int32
+          nullable: true
+          example: 1970
+
+    GenreRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Sci-Fi
+
+    GenreResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Sci-Fi
+
+    MovieRequest:
+      type: object
+      required: [title, releaseYear, directorId]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          example: Inception
+        releaseYear:
+          type: integer
+          format: int32
+          example: 2010
+        rating:
+          type: number
+          format: double
+          minimum: 0.0
+          maximum: 10.0
+          nullable: true
+          description: Defaults to catalog.default-rating when omitted
+          example: 8.8
+        directorId:
+          type: integer
+          format: int64
+          example: 1
+        genreIds:
+          type: array
+          uniqueItems: true
+          nullable: true
+          description: At most catalog.max-genres-per-movie ids. On update, omit to keep existing genres.
+          items:
+            type: integer
+            format: int64
+          example: [1, 2]
+
+    MovieResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        title:
+          type: string
+          example: Inception
+        releaseYear:
+          type: integer
+          format: int32
+          example: 2010
+        rating:
+          type: number
+          format: double
+          example: 8.8
+        director:
+          $ref: "#/components/schemas/DirectorSummary"
+        genres:
+          type: array
+          description: Sorted by name
+          items:
+            $ref: "#/components/schemas/GenreResponse"
+
+    DirectorSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Christopher Nolan
+
+    PageMetadata:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Zero-based page index
+          example: 0
+        size:
+          type: integer
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          example: 1
+        totalPages:
+          type: integer
+          example: 1
+
+    DirectorPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: "#/components/schemas/DirectorResponse"
+
+    GenrePage:
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: "#/components/schemas/GenreResponse"
+
+    MoviePage:
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: "#/components/schemas/MovieResponse"
+
+    ApiError:
+      type: object
+      required: [timestamp, status, error, message, path]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          description: HTTP reason phrase
+          example: Not Found
+        message:
+          type: string
+          example: Movie not found with id 42
+        path:
+          type: string
+          example: /api/movies/42
+        fieldErrors:
+          type: object
+          description: Present only for validation failures; maps field name to message
+          additionalProperties:
+            type: string
